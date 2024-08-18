@@ -101,7 +101,7 @@ bool testBST() {
 }
 
 int main() {
-    int total = 100;
+    int total = 1000;
     int passed = 0;
     for (int i = 0; i < total; i++) {
         if (testBST()) {

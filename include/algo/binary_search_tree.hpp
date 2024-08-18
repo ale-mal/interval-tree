@@ -28,8 +28,8 @@ public:
     void setLeft(std::unique_ptr<Node>&& node) { left_ = std::move(node); }
     void setRight(std::unique_ptr<Node>&& node) { right_ = std::move(node); }
 
-    std::unique_ptr<Node>&& takeLeft() { return std::move(left_); }
-    std::unique_ptr<Node>&& takeRight() { return std::move(right_); }
+    std::unique_ptr<Node> takeLeft() { return std::move(left_); }
+    std::unique_ptr<Node> takeRight() { return std::move(right_); }
 
     const Node* parent() const { return parent_; }
     Node* parent() { return parent_; }
@@ -54,7 +54,7 @@ private:
 template <typename T, typename U>
 class BinarySearchTree {
 public:
-    using Node = BinarySearchTreeNode<T, U>;
+    using NodeType = std::unique_ptr<BinarySearchTreeNode<T, U>>;
 
     template <typename Function>
     void inorder(Function&& func) const;
@@ -62,16 +62,16 @@ public:
     template <typename Function>
     void inorder(Function&& func);
 
-    Node* search(const T& key) const;
+    U* search(const T& key) const;
 
     void add(const T& key, U value);
 
-    void remove(const T& key);
+    NodeType remove(const T& key);
 
     bool isBST() const;
 
 private:
-    using NodeType = std::unique_ptr<BinarySearchTreeNode<T, U>>;
+    using Node = BinarySearchTreeNode<T, U>;
 
     template <typename Function>
     void inorder(const NodeType& node, Function&& func) const;
@@ -126,7 +126,7 @@ void BinarySearchTree<T, U>::inorder(NodeType& node, Function&& func) {
 }
 
 template <typename T, typename U>
-typename BinarySearchTree<T, U>::Node* BinarySearchTree<T, U>::search(const T& key) const {
+U* BinarySearchTree<T, U>::search(const T& key) const {
     Node* x = root_.get();
     while (x != nullptr && !(key == x->key())) {
         if (key < x->key()) {
@@ -135,7 +135,10 @@ typename BinarySearchTree<T, U>::Node* BinarySearchTree<T, U>::search(const T& k
             x = x->right().get();
         }
     }
-    return x;
+    if (x == nullptr) {
+        return nullptr;
+    }
+    return x->value();
 }
 
 template <typename T, typename U>
@@ -219,20 +222,21 @@ typename BinarySearchTree<T, U>::NodeType BinarySearchTree<T, U>::transplant(con
             parent->right()->setParent(parent);
         }
     }
+    old_subtree->setParent(nullptr);
     return old_subtree;
 }
 
 template <typename T, typename U>
-void BinarySearchTree<T, U>::remove(const T& key) {
+typename BinarySearchTree<T, U>::NodeType BinarySearchTree<T, U>::remove(const T& key) {
     const auto& z = find(key, root_);
     if (z == nullptr) {
-        return;
+        return nullptr;
     }
 
     if (z->left() == nullptr) {
-        transplant(z, z->takeRight());
+        return transplant(z, z->takeRight());
     } else if (z->right() == nullptr) {
-        transplant(z, z->takeLeft());
+        return transplant(z, z->takeLeft());
     } else {
         const auto& y = minimum(z->right());
         if (y != z->right()) {
@@ -242,13 +246,14 @@ void BinarySearchTree<T, U>::remove(const T& key) {
 
             old_y->setLeft(z->takeLeft());
             old_y->left()->setParent(old_y.get());
-            transplant(z, std::move(old_y));
+            return transplant(z, std::move(old_y));
         } else {
             y->setLeft(z->takeLeft());
             y->left()->setParent(y.get());
-            transplant(z, z->takeRight());
+            return transplant(z, z->takeRight());
         }
     }
+    return nullptr;
 }
 
 template <typename T, typename U>
