@@ -1,7 +1,6 @@
-#include "algo/binary_search_tree.h"
+#include "algo/binary_search_tree.hpp"
 
 int main() {
-    algo::BinarySearchTree bst;
-    bst.print();
+    algo::BinarySearchTree<int, int> bst;
     return 0;
 }
