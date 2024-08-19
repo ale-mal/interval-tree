@@ -1,4 +1,5 @@
 #include "algo/binary_search_tree.hpp"
+#include "algo/interval_tree.hpp"
 
 #include <iostream>
 #include <vector>
@@ -100,7 +101,7 @@ bool testBST() {
     return true;
 }
 
-int main() {
+bool testBSTAll() {
     int total = 1000;
     int passed = 0;
     for (int i = 0; i < total; i++) {
@@ -109,5 +110,17 @@ int main() {
         }
     }
     std::cout << "Passed " << passed << " out of " << total << " tests." << std::endl;
+    return passed == total;
+}
+
+int main() {
+    if (!testBSTAll()) {
+        return 1;
+    }
+    if (!test::testIntervalTree()) {
+        return 1;
+    }
+    std::cout << "All tests passed." << std::endl;
+
     return 0;
 }
