@@ -25,8 +25,8 @@ public:
     const std::unique_ptr<Node>& right() const { return right_; }
     std::unique_ptr<Node>& right() { return right_; }
 
-    void setLeft(std::unique_ptr<Node>&& node) { left_ = std::move(node); }
-    void setRight(std::unique_ptr<Node>&& node) { right_ = std::move(node); }
+    void setLeft(std::unique_ptr<Node>&& node) { left_ = std::move(node); if (left_) { left_->setParent(this); } }
+    void setRight(std::unique_ptr<Node>&& node) { right_ = std::move(node); if (right_) { right_->setParent(this); } }
 
     std::unique_ptr<Node> takeLeft() { return std::move(left_); }
     std::unique_ptr<Node> takeRight() { return std::move(right_); }
@@ -67,6 +67,9 @@ public:
     void add(const T& key, U value);
 
     NodeType remove(const T& key);
+
+    const NodeType& min_element() const { return minimum(root_); }
+    const NodeType& max_element() const { return maximum(root_); }
 
     bool isBST() const;
 
@@ -138,7 +141,7 @@ U* BinarySearchTree<T, U>::search(const T& key) const {
     if (x == nullptr) {
         return nullptr;
     }
-    return x->value();
+    return &x->value();
 }
 
 template <typename T, typename U>
@@ -158,9 +161,9 @@ void BinarySearchTree<T, U>::addNode(NodeType&& node) {
             x = x->right().get();
         }
     }
-    node->setParent(y);
     if (y == nullptr) {
         root_ = std::move(node);
+        root_->setParent(nullptr);
     } else if (node->key() < y->key()) {
         y->setLeft(std::move(node));
     } else {
@@ -212,15 +215,9 @@ typename BinarySearchTree<T, U>::NodeType BinarySearchTree<T, U>::transplant(con
     if (u == parent->left()) {
         old_subtree = std::move(parent->takeLeft());
         parent->setLeft(std::move(v));
-        if (parent->left()) {
-            parent->left()->setParent(parent);
-        }
     } else {
         old_subtree = std::move(parent->takeRight());
         parent->setRight(std::move(v));
-        if (parent->right()) {
-            parent->right()->setParent(parent);
-        }
     }
     old_subtree->setParent(nullptr);
     return old_subtree;
@@ -242,14 +239,10 @@ typename BinarySearchTree<T, U>::NodeType BinarySearchTree<T, U>::remove(const T
         if (y != z->right()) {
             auto old_y = transplant(y, y->takeRight());
             old_y->setRight(z->takeRight());
-            old_y->right()->setParent(old_y.get());
-
             old_y->setLeft(z->takeLeft());
-            old_y->left()->setParent(old_y.get());
             return transplant(z, std::move(old_y));
         } else {
             y->setLeft(z->takeLeft());
-            y->left()->setParent(y.get());
             return transplant(z, z->takeRight());
         }
     }
