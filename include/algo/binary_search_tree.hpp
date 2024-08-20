@@ -4,83 +4,14 @@
 #include <functional>
 #include <stdexcept>
 
+#include "internal/binary_search_tree_container.hpp"
+
 namespace algo {
-template <typename Key, typename Value>
-class BinarySearchTreeNode final {
-    static_assert(std::is_same_v<bool, decltype(std::declval<Key>() < std::declval<Key>())>, "Key type must support operator< and return a bool");
-    static_assert(std::is_same_v<bool, decltype(std::declval<Key>() == std::declval<Key>())>, "Key type must support operator== and return a bool");
 
-public:
-    using Node = BinarySearchTreeNode<Key, Value>;
-
-    template <typename... Args>
-    explicit BinarySearchTreeNode(Key && key, Args&&... args)
-        : left_(nullptr), right_(nullptr), parent_(nullptr), key_(std::move(key)), value_(std::forward<Args>(args)...) {}
-
-    const Node* left() const { return left_; }
-    Node* left() { return left_; }
-
-    const Node* right() const { return right_; }
-    Node* right() { return right_; }
-
-    void setLeft(Node* node) {
-        left_ = node;
-        if (left_) {
-            left_->setParent(this);
-        }
-    }
-
-    void setRight(Node* node) {
-        right_ = node;
-        if (right_) {
-            right_->setParent(this);
-        }
-    }
-
-    Node* takeLeft() {
-        auto old_left = left_;
-        left_ = nullptr;
-        if (old_left) {
-            old_left->setParent(nullptr);
-        }
-        return old_left;
-    }
-
-    Node* takeRight() {
-        auto old_right = right_;
-        right_ = nullptr;
-        if (old_right) {
-            old_right->setParent(nullptr);
-        }
-        return old_right;
-    }
-
-    const Node* parent() const { return parent_; }
-    Node* parent() { return parent_; }
-
-    void setParent(Node* parent) { parent_ = parent; }
-
-    const Key& key() const { return key_; }
-
-    const Value& value() const { return value_; }
-    Value& mutable_value() { return value_; }
-
-    void setValue(Value&& value) { value_ = std::move(value); }
-
-private:
-    Node* left_;
-    Node* right_;
-    Node* parent_;
-    Key key_;
-    Value value_;
-};
-
-template <typename T, typename U>
+template <typename T, typename U, typename Compare = std::less<T>, typename Node= internal::BinarySearchTreeNode<T, U>>
 class BinarySearchTree {
 public:
-    using Node = BinarySearchTreeNode<T, U>;
-
-    BinarySearchTree() noexcept : root_(nullptr) {}
+    BinarySearchTree() noexcept : root_(nullptr), sz_(0), comp_(Compare()) {}
     ~BinarySearchTree() { clear(); }
 
     BinarySearchTree(BinarySearchTree&& bst) noexcept = default;
@@ -104,12 +35,11 @@ public:
 
     void remove(const T& key);
 
-    const Node* min_element() const { return minimum(root_); }
-    const Node* max_element() const { return maximum(root_); }
-
     bool isBST() const;
 
-private:
+    int size() const { return sz_; }
+
+protected:
     using NodeType = std::unique_ptr<Node>;
 
     void clear();
@@ -124,7 +54,7 @@ private:
     NodeType internal_remove(Node* node);
 
     const Node* search(const T& key) const;
-    Node* mutable_search(const T& key);
+    Node* search(const T& key);
 
     Node* minimum(Node* node) const;
     Node* maximum(Node* node) const;
@@ -134,30 +64,32 @@ private:
     bool isBST(const Node* node) const;
 
     Node* root_;
+    int sz_;
+    Compare comp_;
 };
 
-template <typename T, typename U>
-void BinarySearchTree<T, U>::clear() {
+template <typename T, typename U, typename Compare, typename Node>
+void BinarySearchTree<T, U, Compare, Node>::clear() {
     while (root_ != nullptr) {
         internal_remove(root_);
     }
 }
 
-template <typename T, typename U>
+template <typename T, typename U, typename Compare, typename Node>
 template <typename Function>
-void BinarySearchTree<T, U>::inorder(Function&& func) const {
+void BinarySearchTree<T, U, Compare, Node>::inorder(Function&& func) const {
     inorder(root_, std::forward<Function>(func));
 }
 
-template <typename T, typename U>
+template <typename T, typename U, typename Compare, typename Node>
 template <typename Function>
-void BinarySearchTree<T, U>::inorder(Function&& func) {
+void BinarySearchTree<T, U, Compare, Node>::inorder(Function&& func) {
     inorder(root_, std::forward<Function>(func));
 }
 
-template <typename T, typename U>
+template <typename T, typename U, typename Compare, typename Node>
 template <typename Function>
-void BinarySearchTree<T, U>::inorder(const Node* node, Function&& func) const {
+void BinarySearchTree<T, U, Compare, Node>::inorder(const Node* node, Function&& func) const {
     if (node) {
         inorder(node->left(), std::forward<Function>(func));
         func(node->key(), node->value());
@@ -165,9 +97,9 @@ void BinarySearchTree<T, U>::inorder(const Node* node, Function&& func) const {
     }
 }
 
-template <typename T, typename U>
+template <typename T, typename U, typename Compare, typename Node>
 template <typename Function>
-void BinarySearchTree<T, U>::inorder(Node* node, Function&& func) {
+void BinarySearchTree<T, U, Compare, Node>::inorder(Node* node, Function&& func) {
     if (node) {
         inorder(node->left(), std::forward<Function>(func));
         func(node->key(), node->value());
@@ -175,8 +107,8 @@ void BinarySearchTree<T, U>::inorder(Node* node, Function&& func) {
     }
 }
 
-template <typename T, typename U>
-const U& BinarySearchTree<T, U>::at(const T& key) const {
+template <typename T, typename U, typename Compare, typename Node>
+const U& BinarySearchTree<T, U, Compare, Node>::at(const T& key) const {
     const Node* node = search(key);
     if (node == nullptr) {
         throw std::out_of_range("Key not found");
@@ -184,53 +116,59 @@ const U& BinarySearchTree<T, U>::at(const T& key) const {
     return node->value();
 }
 
-template <typename T, typename U>
-U& BinarySearchTree<T, U>::at(const T& key) {
-    Node* node = mutable_search(key);
+template <typename T, typename U, typename Compare, typename Node>
+U& BinarySearchTree<T, U, Compare, Node>::at(const T& key) {
+    Node* node = search(key);
     if (node == nullptr) {
         throw std::out_of_range("Key not found");
     }
-    return node->mutable_value();
+    return node->value();
 }
 
-template <typename T, typename U>
-const typename BinarySearchTree<T, U>::Node* BinarySearchTree<T, U>::search(const T& key) const {
+template <typename T, typename U, typename Compare, typename Node>
+const Node* BinarySearchTree<T, U, Compare, Node>::search(const T& key) const {
     const Node* x = root_;
-    while (x != nullptr && !(key == x->key())) {
-        if (key < x->key()) {
+    while (x != nullptr) {
+        if (comp_(key, x->key())) {
             x = x->left();
-        } else {
+        } else if (comp_(x->key(), key)) {
             x = x->right();
+        } else {
+            // key == x->key()
+            break;
         }
     }
     return x;
 }
 
-template <typename T, typename U>
-typename BinarySearchTree<T, U>::Node* BinarySearchTree<T, U>::mutable_search(const T& key) {
+template <typename T, typename U, typename Compare, typename Node>
+Node* BinarySearchTree<T, U, Compare, Node>::search(const T& key) {
     Node* x = root_;
-    while (x != nullptr && !(key == x->key())) {
-        if (key < x->key()) {
+    while (x != nullptr) {
+        if (comp_(key, x->key())) {
             x = x->left();
-        } else {
+        } else if (comp_(x->key(), key)) {
             x = x->right();
+        } else {
+            // key == x->key()
+            break;
         }
     }
     return x;
 }
 
-template <typename T, typename U>
-void BinarySearchTree<T, U>::add(const T& key, U value) {
+template <typename T, typename U, typename Compare, typename Node>
+void BinarySearchTree<T, U, Compare, Node>::add(const T& key, U value) {
     internal_add(std::make_unique<Node>(T{key}, std::move(value)));
 }
 
-template <typename T, typename U>
-void BinarySearchTree<T, U>::internal_add(NodeType&& node) {
+template <typename T, typename U, typename Compare, typename Node>
+void BinarySearchTree<T, U, Compare, Node>::internal_add(NodeType&& node) {
     Node* x = root_;
     Node* y = nullptr;
     while (x != nullptr) {
         y = x;
-        if (node->key() < x->key()) {
+        if (comp_(node->key(), x->key())) {
             x = x->left();
         } else {
             x = x->right();
@@ -239,21 +177,22 @@ void BinarySearchTree<T, U>::internal_add(NodeType&& node) {
     if (y == nullptr) {
         root_ = node.get();
         root_->setParent(nullptr);
-    } else if (node->key() < y->key()) {
+    } else if (comp_(node->key(), y->key())) {
         y->setLeft(node.get());
     } else {
         y->setRight(node.get());
     }
     node.release();
+    sz_++;
 }
 
-template <typename T, typename U>
-void BinarySearchTree<T, U>::remove(const T& key) {
-    internal_remove(mutable_search(key));
+template <typename T, typename U, typename Compare, typename Node>
+void BinarySearchTree<T, U, Compare, Node>::remove(const T& key) {
+    internal_remove(search(key));
 }
 
-template <typename T, typename U>
-void BinarySearchTree<T, U>::transplant(Node* u, Node* v) {
+template <typename T, typename U, typename Compare, typename Node>
+void BinarySearchTree<T, U, Compare, Node>::transplant(Node* u, Node* v) {
     // Replace the subtree rooted at node u with the subtree rooted at node v.
     Node* parent = u->parent();
     if (parent == nullptr) {
@@ -268,8 +207,8 @@ void BinarySearchTree<T, U>::transplant(Node* u, Node* v) {
     }
 }
 
-template <typename T, typename U>
-typename BinarySearchTree<T, U>::NodeType BinarySearchTree<T, U>::internal_remove(Node* z) {
+template <typename T, typename U, typename Compare, typename Node>
+typename BinarySearchTree<T, U, Compare, Node>::NodeType BinarySearchTree<T, U, Compare, Node>::internal_remove(Node* z) {
     if (z == nullptr) {
         return nullptr;
     }
@@ -288,33 +227,34 @@ typename BinarySearchTree<T, U>::NodeType BinarySearchTree<T, U>::internal_remov
         y->setLeft(z->takeLeft());
     }
 
+    sz_--;
     std::unique_ptr<Node> old_node(z);
     return old_node;
 }
 
-template <typename T, typename U>
-typename BinarySearchTree<T, U>::Node* BinarySearchTree<T, U>::minimum(Node* node) const {
+template <typename T, typename U, typename Compare, typename Node>
+Node* BinarySearchTree<T, U, Compare, Node>::minimum(Node* node) const {
     while (node != nullptr && node->left() != nullptr) {
         node = node->left();
     }
     return node;
 }
 
-template <typename T, typename U>
-typename BinarySearchTree<T, U>::Node* BinarySearchTree<T, U>::maximum(Node* node) const {
+template <typename T, typename U, typename Compare, typename Node>
+Node* BinarySearchTree<T, U, Compare, Node>::maximum(Node* node) const {
     while (node != nullptr && node->right() != nullptr) {
         node = node->right();
     }
     return node;
 }
 
-template <typename T, typename U>
-bool BinarySearchTree<T, U>::isBST() const {
+template <typename T, typename U, typename Compare, typename Node>
+bool BinarySearchTree<T, U, Compare, Node>::isBST() const {
     return isBST(root_);
 }
 
-template <typename T, typename U>
-bool BinarySearchTree<T, U>::isBST(const Node* node) const {
+template <typename T, typename U, typename Compare, typename Node>
+bool BinarySearchTree<T, U, Compare, Node>::isBST(const Node* node) const {
     if (node == nullptr) {
         return true;
     }
@@ -329,7 +269,7 @@ bool BinarySearchTree<T, U>::isBST(const Node* node) const {
     }
 
     if (node->right() != nullptr) {
-        if (node->right()->key() < node->key()) {
+        if (comp_(node->right()->key(), node->key())) {
             return false;
         }
         if (!isBST(node->right())) {
