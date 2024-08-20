@@ -1,5 +1,6 @@
 #include "algo/binary_search_tree.hpp"
 #include "algo/interval_tree.hpp"
+#include "test/interval_tree.hpp"
 
 #include <iostream>
 #include <vector>
